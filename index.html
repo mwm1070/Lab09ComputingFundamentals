@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Computer Networks Ch.1–5 — Interactive Animations</title>
+<style>
+  :root{ --bg:#f5f7fa; --card:#fff; --ink:#1c2541; --mut:#5c6b8a; --line:#c7d0e0;
+         --sw:#3d5a80; --host:#e07a5f; --pkt:#2a9d8f; --hl:#f4c95d; --bad:#e63946; --ok:#43aa8b; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  header{background:#1c2541;color:#fff;padding:20px 24px}
+  header h1{margin:0 0 4px;font-size:20px}
+  header p{margin:0;color:#c3cbe0;font-size:13px}
+  nav{position:sticky;top:0;z-index:5;background:#22304f;padding:8px 16px;display:flex;flex-wrap:wrap;gap:6px}
+  nav a{color:#cdd7ee;text-decoration:none;font-size:12.5px;padding:4px 9px;border-radius:20px;background:#2c3c60}
+  nav a:hover{background:#3d5a80;color:#fff}
+  main{max-width:1040px;margin:0 auto;padding:16px}
+  section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:14px 0;scroll-margin-top:60px}
+  section h2{margin:0 0 4px;font-size:17px;color:#1c2541}
+  section .desc{color:var(--mut);font-size:13.5px;margin:0 0 10px}
+  .demo{display:flex;flex-direction:column;align-items:center}
+  svg.scene{width:100%;max-width:680px;height:auto;background:#fbfcfe;border:1px solid #e3e8f2;border-radius:10px}
+  .caption{min-height:42px;margin:10px 4px 6px;font-size:14px;text-align:center;color:#22304f;max-width:680px}
+  .ctr{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+  button{font:inherit;font-size:13px;padding:6px 12px;border-radius:8px;border:1px solid #b9c4db;background:#fff;color:#22304f;cursor:pointer}
+  button:hover:not(:disabled){background:#eef2fa}
+  button:disabled{opacity:.4;cursor:default}
+  /* SVG element styles */
+  .node{fill:#eef2fa;stroke:var(--sw);stroke-width:2}
+  .node.host{fill:#fdeeea;stroke:var(--host)}
+  .node.hl{fill:var(--hl);stroke:#b58100}
+  .node.dim{opacity:.35}
+  .nlabel{fill:#1c2541;font-size:15px;font-weight:600;text-anchor:middle;dominant-baseline:middle}
+  .link{stroke:var(--line);stroke-width:3;stroke-linecap:round}
+  .link.active{stroke:var(--pkt);stroke-width:4}
+  .link.pruned{stroke:var(--bad);stroke-width:3;stroke-dasharray:7 6}
+  .mover{transition:transform .9s cubic-bezier(.4,0,.2,1)}
+  .dot{fill:var(--pkt);stroke:#fff;stroke-width:2}
+  .dot.bad{fill:var(--bad)}
+  .badge{fill:#fff;stroke:var(--pkt);stroke-width:2}
+  .pktlbl{fill:#fff;font-size:12px;font-weight:700;text-anchor:middle;dominant-baseline:middle}
+  .lbl{fill:var(--ink);font-size:13px}
+  .small{fill:var(--mut);font-size:11.5px}
+  .seg rect{stroke:#1c2541;stroke-width:1.5}
+  .seg .sDATA{fill:#a8dadc}
+  .seg .sTCP{fill:#b8e0b8}
+  .seg .sIP{fill:#f2c9a0}
+  .seg .sETH{fill:#e6a8a8}
+  .seg text{fill:#1c2541;font-size:13px;font-weight:600;text-anchor:middle;dominant-baseline:middle}
+  .tblbox{fill:#fff;stroke:var(--line);stroke-width:1.5}
+  .tbltext{fill:#22304f;font-size:13px}
+  .tblhead{fill:#1c2541;font-size:13px;font-weight:700}
+  .mono{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+  .flash{animation:pop .7s ease}
+  @keyframes pop{0%{transform:scale(.6);opacity:.2}100%{transform:scale(1);opacity:1}}
+  footer{max-width:1040px;margin:20px auto;padding:0 16px 40px;color:var(--mut);font-size:12.5px}
+  @media print{nav{display:none}.ctr{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Computer Networks, Chapters 1–5 — Animated Demos</h1>
+  <p>Click <b>Step</b> to advance one event, or <b>Play</b> to run the animation. Offline &amp; self-contained.</p>
+</header>
+<nav id="nav"></nav>
+<main id="main"></main>
+<footer>Companion to <span class="mono">An Introduction to Computer Networks</span> (Dordal, 2nd ed.), chapters 1–5. Diagrams are schematic, not to scale.</footer>
+
+<script>
+(function(){
+  const NS="http://www.w3.org/2000/svg";
+  function X(tag,attrs,parent){const e=document.createElementNS(NS,tag);if(attrs)for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+  function box(parent,x,y,w,h,t,cls){const r=X("rect",{x:x,y:y,width:w,height:h,rx:7,class:"node "+(cls||"")},parent);let tx=null;if(t!=null){tx=X("text",{x:x+w/2,y:y+h/2,class:"nlabel"},parent);tx.textContent=t;}return{r:r,tx:tx};}
+  function ln(parent,x1,y1,x2,y2,cls){return X("line",{x1:x1,y1:y1,x2:x2,y2:y2,class:"link "+(cls||"")},parent);}
+  function txt(parent,x,y,t,cls,anchor){const e=X("text",{x:x,y:y,class:cls||"lbl","text-anchor":anchor||"middle"},parent);e.textContent=t;return e;}
+  function hl(n,on){if(n&&n.r)n.r.classList.toggle("hl",!!on);}
+  function active(l,on){l.classList.toggle("active",!!on);}
+  function pruned(l,on){l.classList.toggle("pruned",!!on);}
+
+  /* ---------- generic player ---------- */
+  function Player(host,demoFactory){
+    const card=document.createElement("div");card.className="demo";
+    const svg=document.createElementNS(NS,"svg");svg.setAttribute("viewBox","0 0 660 360");svg.setAttribute("class","scene");
+    const cap=document.createElement("div");cap.className="caption";
+    const ctr=document.createElement("div");ctr.className="ctr";
+    const bReset=M("↺ Reset"),bPrev=M("◀ Prev"),bStep=M("Step ▶"),bPlay=M("▶ Play");
+    ctr.append(bReset,bPrev,bStep,bPlay);card.append(svg,cap,ctr);host.appendChild(card);
+    const demo=demoFactory(svg);const n=demo.n;let i=0,timer=null;
+    function render(){demo.go(i);cap.innerHTML=demo.caps[i]||"";bPrev.disabled=(i===0);bStep.disabled=(i>=n);}
+    function stop(){if(timer){clearInterval(timer);timer=null;bPlay.textContent="▶ Play";}}
+    bPrev.onclick=()=>{stop();if(i>0){i--;render();}};
+    bStep.onclick=()=>{stop();if(i<n){i++;render();}};
+    bReset.onclick=()=>{stop();i=0;render();};
+    bPlay.onclick=()=>{if(timer){stop();return;}if(i>=n){i=0;render();}bPlay.textContent="⏸ Pause";
+      timer=setInterval(()=>{if(i<n){i++;render();}else stop();},1400);};
+    render();
+  }
+  function M(t){const b=document.createElement("button");b.textContent=t;return b;}
+
+  function section(id,title,desc,builder){const main=document.getElementById("main");
+    const s=document.createElement("section");s.id=id;s.innerHTML="<h2>"+title+"</h2><p class='desc'>"+desc+"</p>";
+    main.appendChild(s);Player(s,builder);
+    const nav=document.getElementById("nav");const a=document.createElement("a");a.href="#"+id;a.textContent=title.replace(/^\d+\s*/,"");nav.appendChild(a);}
+
+  /* =========================================================
+     1 · Encapsulation
+  ========================================================= */
+  section("enc","1 · Encapsulation (layers)","Data gains a header at each layer going down (application → link) and loses them going up.",
+  function(svg){
+    const g=X("g",{class:"seg"},svg);
+    ["Application","Transport","Network","Link"].forEach((L,k)=>txt(svg,74,60+k*30,L,"small"));
+    const seq=[["DATA"],["TCP","DATA"],["IP","TCP","DATA"],["ETH","IP","TCP","DATA"],["IP","TCP","DATA"],["TCP","DATA"],["DATA"]];
+    const cap=["Application data — just the message.","Transport adds the TCP/UDP header → a <i>segment</i>.","Network adds the IP header → a <i>packet</i>.","Link adds the Ethernet header/trailer → a <i>frame</i> put on the wire.","Receiver strips the link header.","Strips the network header.","Strips the transport header — the original data is delivered."];
+    const col={DATA:"sDATA",TCP:"sTCP",IP:"sIP",ETH:"sETH"};
+    function go(i){g.textContent="";let x=190;const y=230;seq[i].forEach(s=>{const w=s==="DATA"?190:76;const gg=X("g",{class:"flash"},g);X("rect",{x:x,y:y,width:w,height:52,rx:6,class:col[s]},gg);const t=X("text",{x:x+w/2,y:y+26},gg);t.textContent=s;x+=w+6;});
+      txt(g,400,180,i<4?"⬇ going DOWN the stack":"⬆ going UP the stack","small");}
+    return{n:6,caps:cap,go:go};
+  });
+
+  /* =========================================================
+     2 · Datagram forwarding
+  ========================================================= */
+  section("fwd","2 · Datagram forwarding","Each switch looks up the destination in its forwarding table and sends the packet to one next hop.",
+  function(svg){
+    const s1=box(svg,180,150,70,52,"S1"),s2=box(svg,320,150,70,52,"S2"),s3=box(svg,460,150,70,52,"S3");
+    const a=box(svg,40,150,70,52,"A","host"),d=box(svg,600,150,50,52,"D","host");
+    ln(svg,110,176,180,176);const l12=ln(svg,250,176,320,176);const l23=ln(svg,390,176,460,176);ln(svg,530,176,600,176);
+    const mover=X("g",{class:"mover"},svg);X("circle",{cx:0,cy:0,r:15,class:"dot"},mover);const ml=X("text",{x:0,y:1,class:"pktlbl"},mover);ml.textContent="D";
+    X("rect",{x:150,y:270,width:360,height:52,rx:8,class:"tblbox"},svg);
+    const tl=X("text",{x:170,y:300,class:"tbltext mono"},svg);
+    const pos=[[75,176],[215,176],[355,176],[355,176],[495,176],[625,176]];
+    const caps=["Host A wants to send a packet to D.","S1 looks up destination D.","S1's table: D → S2, so it forwards the packet to S2.","S2 looks up D: next hop is S3, so forward to S3.","S3 looks up D: it is local, so deliver to D.","D receives the packet."];
+    function go(i){mover.style.transform="translate("+pos[i][0]+"px,"+pos[i][1]+"px)";
+      hl(s1,i===1);hl(s2,i===3);hl(s3,i===4);
+      active(l12,i>=2);active(l23,i>=3);
+      const rows=["(no lookup yet)","S1: D  →  S2","forwarding toward S2","S2: D  →  S3","S3: D  →  local","delivered"];
+      tl.textContent=rows[i];}
+    return{n:5,caps:caps,go:go};
+  });
+
+  /* =========================================================
+     3 · TTL vs routing loop
+  ========================================================= */
+  section("ttl","3 · TTL stops a routing loop","Two switches wrongly point at each other for destination X. TTL decrements every hop and kills the packet.",
+  function(svg){
+    const s1=box(svg,150,150,80,56,"S1"),s2=box(svg,430,150,80,56,"S2");
+    X("rect",{x:150,y:56,width:360,height:34,rx:6,class:"tblbox"},svg);
+    txt(svg,330,73,"S1: X → S2        S2: X → S1  (inconsistent!)","small");
+    const mover=X("g",{class:"mover"},svg);X("circle",{cx:0,cy:0,r:16,class:"dot"},mover);const ml=X("text",{x:0,y:1,class:"pktlbl"},mover);ml.textContent="X";
+    const ttl=X("text",{x:330,y:290,class:"lbl"},svg);
+    const hops=X("text",{x:330,y:315,class:"small"},svg);
+    const pos=[[190,178],[470,178],[190,178],[470,178],[190,178]];
+    const caps=["A packet to X starts with TTL = 4 at S1.","S1→S2: TTL 3.","S2→S1: TTL 2.","S1→S2: TTL 1.","S2 decrements TTL to 0 and <b>drops</b> the packet — the loop is broken."];
+    function go(i){mover.style.transform="translate("+pos[i][0]+"px,"+pos[i][1]+"px)";
+      const v=4-i;ttl.textContent=(i>=4)?"TTL = 0  →  DROPPED":("TTL = "+v);hops.textContent="forwarded "+(i)+" time(s) around the loop";
+      mover.querySelector(".dot").classList.toggle("bad",i>=4);}
+    return{n:4,caps:caps,go:go};
+  });
+
+  /* =========================================================
+     4 · Congestion / queue build-up
+  ========================================================= */
+  section("cong","4 · Congestion (queue build-up)","Arrivals faster than the outgoing link cause a queue to grow; delay rises until it drains.",
+  function(svg){
+    txt(svg,110,80,"incoming  →  ROUTER  →  outgoing link","small");
+    const router=box(svg,250,60,90,60,"R");
+    X("line",{x1:110,y1:90,x2:250,y2:90,class:"link"},svg);
+    const out=ln(svg,340,90,560,90,"");active(out,true);
+    const q=X("g",{},svg);
+    const qv=X("text",{x:250,y:300,class:"lbl"},svg);
+    const dv=X("text",{x:250,y:325,class:"small"},svg);
+    // arrivals per step, served per step
+    const arr=[3,4,4,3,1,0,0,0], served=[1,1,1,2,3,3,2,1];
+    const caps=[];let qq=0;for(let k=0;k<8;k++){qq+=arr[k]-served[k];qq=Math.max(0,Math.min(qq,10));caps.push("Step "+(k+1)+": "+arr[k]+" arrive, "+served[k]+" leave");}
+    function go(i){let n=0;for(let k=0;k<=i;k++)n=Math.max(0,Math.min(10,n+arr[k]-served[k]));
+      q.textContent="";for(let k=0;k<n;k++){X("rect",{x:250,y:250-k*16,width:90,height:13,rx:3,fill:"#2a9d8f",opacity:0.85},q);}
+      qv.textContent="queue length = "+n;
+      dv.textContent=n>=8?"⚠ queueing delay is large":(n===0?"queue empty — no delay":"delay ≈ "+n+" packet times");
+      active(out,n<6);}
+    return{n:7,caps:caps,go:go};
+  });
+
+  /* =========================================================
+     5 · CSMA/CD exponential backoff
+  ========================================================= */
+  section("csma","5 · CSMA/CD + exponential backoff","Five stations contend at T=0. On the n-th collision each picks k∈{0…2ⁿ−1} and waits k slots.",
+  function(svg){
+    const rows={A:90,B:125,C:160,D:195,E:230};
+    const colors={A:"#3d5a80",B:"#e07a5f",C:"#2a9d8f",D:"#8e7cc3",E:"#c98100"};
+    const axis=X("g",{},svg);
+    for(let t=0;t<=9;t++){X("line",{x1:90+t*52,y1:70,x2:90+t*52,y2:250,class:"link"},axis);X("text",{x:90+t*52,y:268,class:"small"},axis).textContent="T"+t;}
+    Object.entries(rows).forEach(([k,y])=>{txt(svg,70,y,k,"lbl");});
+    const g=X("g",{},svg);
+    const ev=[
+      {t:0,who:"ABCDE",type:"attempt",bk:"A k=1, B/C/D/E k=0"},
+      {t:0,who:"ABCDE",type:"collide"},
+      {t:1,who:"BCDE",type:"attempt",bk:"B k=3, C k=0, D k=3, E k=0"},
+      {t:1,who:"BCDE",type:"collide"},
+      {t:2,who:"ACE",type:"attempt",bk:"A k=0, C k=2, E k=6"},
+      {t:2,who:"ACE",type:"collide"},
+      {t:3,who:"A",type:"success"}
+    ];
+    const caps=["Idle. All five stations wish to send.",
+      "T=0: A,B,C,D,E all transmit.",
+      "Collision detected at T=1. They back off: A waits 1 slot; B,C,D,E wait 0.",
+      "T=1: B,C,D,E transmit.",
+      "Collision detected at T=2. They back off (k ∈ {0..3}): B,D wait 3; C,E wait 0.",
+      "T=2: A (which waited 1) rejoins, with C and E.",
+      "Collision detected at T=3. A waits 0; C waits 2; E waits 6.",
+      "T=3: only A is ready ⇒ A transmits successfully. Contention ends."];
+    function marker(row,t,kind){const x=90+t*52,y=rows[row];
+      if(kind==="attempt"||kind==="success"){X("rect",{x:x-14,y:y-11,width:28,height:22,rx:6,fill:kind==="success"?"#43aa8b":colors[row],opacity:.92},g);}
+      if(kind==="collide"){const d="M "+(x-9)+" "+(y-9)+" L "+(x+9)+" "+(y+9)+" M "+(x+9)+" "+(y-9)+" L "+(x-9)+" "+(y+9);
+        X("path",{d:d,stroke:"#e63946","stroke-width":4,fill:"none",class:"flash"},g);}
+    }
+    function go(i){g.textContent="";
+      const upto=i-1;
+      let note="";
+      for(let k=0;k<=upto;k++){const e=ev[k];
+        if(e.type==="attempt"){e.who.split("").forEach(r=>marker(r,e.t,"attempt"));note=e.bk;}
+        else if(e.type==="collide"){e.who.split("").forEach(r=>marker(r,e.t,"collide"));}
+        else if(e.type==="success"){marker(e.who,e.t,"success");}
+      }
+      if(note)txt(g,380,42,"backoff: "+note,"small");}
+    return{n:7,caps:caps,go:go};
+  });
+
+  /* =========================================================
+     6 · Ethernet switch learning
+  ========================================================= */
+  section("learn","6 · Ethernet switch learning","Switches learn ⟨source, port⟩; unknown destinations are flooded. Sequence from textbook Ex. 3.0.",
+  function(svg){
+    const s1=box(svg,140,150,64,48,"S1"),s2=box(svg,300,150,64,48,"S2"),s3=box(svg,460,150,64,48,"S3");
+    const a=box(svg,20,150,60,48,"A","host"),c=box(svg,560,150,70,48,"C","host");
+    const s4=box(svg,300,80,64,44,"S4"),b=box(svg,300,20,60,44,"B","host"),d=box(svg,300,250,60,44,"D","host");
+    ln(svg,80,174,140,174);const l12=ln(svg,204,174,300,174);const l23=ln(svg,364,174,460,174);ln(svg,524,174,560,174);
+    const l24=ln(svg,332,150,332,124);ln(svg,332,80,332,64);const l2d=ln(svg,332,198,332,250);
+    X("rect",{x:20,y:20,width:240,height:220,rx:8,class:"tblbox"},svg);
+    txt(svg,34,44,"switch  →  learned addresses","tblhead","start");
+    const t1=X("text",{x:34,y:74,class:"tbltext mono"},svg);
+    const t2=X("text",{x:34,y:110,class:"tbltext mono"},svg);
+    const t3=X("text",{x:34,y:146,class:"tbltext mono"},svg);
+    const t4=X("text",{x:34,y:182,class:"tbltext mono"},svg);
+    const caps=["All forwarding tables start empty.",
+      "A→D: D is unknown, so the frame is flooded everywhere — but every switch learns A.",
+      "D→A: S2 knows A (via S1), so the frame goes straight to A. S2 and S1 learn D.",
+      "A→B: B is still unknown ⇒ flooded again. Nothing new is learned.",
+      "B→D: S4 floods (D unknown), but S2 knows D ⇒ S4 and S2 learn B."];
+    function go(i){
+      active(l12,i===1||i===2||i===4);active(l23,i===1||i===2);active(l24,i===1||i===3||i===4);active(l2d,i===1||i===4);
+      function fmt(parts){parts=parts.filter(x=>x[1]);return parts.length?parts.map(x=>x[0]).join(", "):"∅";}
+      const hasA=i>=1, hasD=i>=2, hasB=i>=4;
+      t1.textContent="S1: "+fmt([["A",hasA],["D",hasD],["B",hasB]]);
+      t2.textContent="S2: "+fmt([["A",hasA],["D",hasD],["B",hasB]]);
+      t3.textContent="S3: "+fmt([["A",hasA]]);
+      t4.textContent="S4: "+fmt([["A",hasA],["B",hasB]]);
+    }
+    return{n:4,caps:caps,go:go};
+  });
+
+  /* =========================================================
+     7 · Spanning tree pruning
+  ========================================================= */
+  section("stp","7 · Spanning tree algorithm","Root = smallest ID. Each switch keeps its cheapest path to the root; ties break toward the smaller neighbour ID.",
+  function(svg){
+    const N={S1:[130,110],S4:[300,110],S6:[470,110],S3:[130,240],S5:[300,240],S2:[470,240]};
+    const el={};for(const k in N){el[k]=box(svg,N[k][0]-32,N[k][1]-24,64,48,k);}
+    const L={
+      "S1-S4":[N.S1,N.S4], "S4-S6":[N.S4,N.S6], "S1-S3":[N.S1,N.S3],
+      "S4-S5":[N.S4,N.S5], "S6-S2":[N.S6,N.S2], "S3-S5":[N.S3,N.S5], "S5-S2":[N.S5,N.S2]
+    };
+    const LE={};for(const k in L){const p=L[k];LE[k]=ln(svg,p[0][0],p[0][1],p[1][0],p[1][1]);}
+    const caps=["All 7 links active — but the ladder contains loops.",
+      "Elect the root: <b>S1</b> (smallest ID).",
+      "S4 and S3 are one hop from S1 → keep S1–S4 and S1–S3.",
+      "S6's only cheap route is via S4 → keep S4–S6.",
+      "S5 ties via S3 or S4 → smaller neighbour ID (3<4) ⇒ keep S3–S5.",
+      "S2 ties via S5 or S6 → smaller ID (5<6) ⇒ keep S5–S2.",
+      "Disable the redundant links: <b>S4–S5 and S6–S2</b>. The rest forms a tree."];
+    function go(i){
+      hl(el.S1,i>=1);
+      const on={"S1-S4":i>=2,"S1-S3":i>=2,"S4-S6":i>=3,"S3-S5":i>=4,"S5-S2":i>=5};
+      for(const k in LE)active(LE[k],!!on[k]);
+      const cut={"S4-S5":i>=6,"S6-S2":i>=6};
+      for(const k in LE)pruned(LE[k],!!cut[k]);
+    }
+    return{n:6,caps:caps,go:go};
+  });
+
+  /* =========================================================
+     8 · Wi-Fi timing + hidden node
+  ========================================================= */
+  section("wifi","8 · Wi-Fi: DIFS → backoff → DATA → SIFS → ACK","The ACK is sent after SIFS without carrier sense. Because B is hidden from A, B's start does not corrupt A's ACK.",
+  function(svg){
+    txt(svg,140,36,"Hidden-node layout:","small","start");
+    const A=box(svg,60,60,54,42,"A","host"),Ch=box(svg,190,60,54,42,"C","host"),B=box(svg,320,60,54,42,"B","host");
+    txt(svg,320,124,"A and B can't hear each other; both reach C.","small","end");
+    // timeline (schematic; roughly proportional)
+    const y0=180, x0=70, sc=1.5;
+    X("line",{x1:70,y1:y0,x2:630,y2:y0,class:"link"},svg);
+    const wg=X("g",{},svg);
+    function seg(x,w,label,color){X("rect",{x:x,y:y0-17,width:w,height:34,rx:5,fill:color,opacity:.92,stroke:"#1c2541","stroke-width":1},wg);txt(wg,x+w/2,y0,label,"pktlbl");}
+    function go(i){
+      wg.textContent="";
+      const x=x0;
+      const wD=50*sc, wB=60*sc, wData=151*sc, wS=10*sc, wA=70*sc;
+      if(i>=1)seg(x,wD,"DIFS","#8e7cc3");
+      if(i>=2)seg(x+wD,wB,"backoff","#f4c95d");
+      if(i>=3)seg(x+wD+wB,wData,"DATA","#2a9d8f");
+      if(i>=5)seg(x+wD+wB+wData,wS,"SIFS","#c7d0e0");
+      if(i>=5)seg(x+wD+wB+wData+wS,wA,"ACK","#43aa8b");
+      if(i>=4)txt(wg,300,150,"B (hidden from A) starts transmitting here","small","middle");
+      hl(A,i>=3&&i<=4);hl(Ch,i>=5);hl(B,i===4);
+    }
+    const caps=["Medium idle.",
+      "A senses the medium idle and waits one DIFS (50 µs).",
+      "A draws a random backoff and counts it down.",
+      "A transmits its DATA frame to C.",
+      "B (hidden from A) thinks the medium is idle and starts transmitting — but A cannot hear B.",
+      "C sends its ACK after SIFS, without listening. A receives it cleanly because B is hidden from A ⇒ <b>no collision at A</b>."];
+    return{n:5,caps:caps,go:go};
+  });
+
+  /* =========================================================
+     9 · VLAN tagging
+  ========================================================= */
+  section("vlan","9 · VLAN (802.1Q)","A broadcast stays inside its VLAN colour, even across a trunk, thanks to the tag.",
+  function(svg){
+    const s1=box(svg,150,150,80,54,"S1"),s2=box(svg,470,150,80,54,"S2");
+    const trunk=ln(svg,230,177,470,177);txt(svg,350,166,"trunk (tagged)","small");
+    const a=box(svg,20,70,70,46,"A","host");ln(svg,90,93,168,150);
+    const c=box(svg,20,240,70,46,"C","host");ln(svg,90,263,168,204);
+    const b=box(svg,600,70,70,46,"B","host");ln(svg,600,93,532,150);
+    const d=box(svg,600,240,70,46,"D","host");ln(svg,600,263,532,204);
+    txt(svg,55,60,"VLAN red","small");txt(svg,55,300,"VLAN blue","small");
+    txt(svg,635,60,"VLAN red","small");txt(svg,635,300,"VLAN blue","small");
+    function setCol(){[a,c,b,d].forEach(n=>{n.r.style.stroke=(n===a||n===b)?"#e63946":"#3b6ea5";n.r.style.strokeWidth="3";});}
+    setCol();
+    const caps=["Two VLANs share the physical switches: red = A,B; blue = C,D.",
+      "A sends a broadcast. S1 floods it inside the red VLAN and tags it on the trunk.",
+      "The tag crosses the trunk to S2.",
+      "S2 delivers to red ports only — <b>B</b> receives it; blue hosts C and D do not.",
+      "A blue broadcast from C likewise reaches only D — the two VLANs never mix."];
+    function go(i){hl(a,i===1);hl(b,i>=3&&i<=3);hl(c,i===4);hl(d,i===4);hl(s1,i>=1&&i<=2);hl(s2,i>=2);
+      active(trunk,i>=2);}
+    return{n:4,caps:caps,go:go};
+  });
+
+  /* =========================================================
+     10 · VPN tunneling
+  ========================================================= */
+  section("vpn","10 · VPN tunneling","An inner packet (A→X) is wrapped in an outer packet to the VPN server B, carried across the Internet, then unwrapped.",
+  function(svg){
+    const a=box(svg,30,150,66,50,"A","host");
+    const cloud=X("ellipse",{cx:300,cy:176,rx:130,ry:80,fill:"#eef2fa",stroke:"#c7d0e0","stroke-width":2},svg);txt(svg,300,176,"Internet","small");
+    const server=box(svg,520,120,84,50,"B","host");txt(svg,562,190,"VPN server","small");
+    const x=box(svg,590,270,60,48,"X","host");txt(svg,620,254,"dest","small");
+    const mover=X("g",{class:"mover"},svg);
+    const inner=X("rect",{x:-26,y:-22,width:52,height:22,rx:3,fill:"#a8dadc",stroke:"#1c2541"},mover);const it=X("text",{x:0,y:-11,class:"pktlbl",style:"fill:#1c2541"},mover);it.textContent="A→X";
+    const outer=X("rect",{x:-34,y:-40,width:68,height:18,rx:3,fill:"#e6a8a8",stroke:"#1c2541",opacity:0},mover);const ot=X("text",{x:0,y:-31,class:"pktlbl",style:"fill:#1c2541",opacity:0},mover);ot.textContent="to B";
+    const pos=[[63,176],[180,176],[300,176],[470,150],[562,150],[562,150],[620,294]];
+    const caps=["A wants to send a packet to X on the Internet, but policy routes it through the VPN.",
+      "VPN software wraps the inner packet (A→X) in an outer header addressed to the server B.",
+      "The outer packet travels across the commodity Internet.",
+      "It arrives at the VPN server B.",
+      "B strips the outer header — the inner packet (A→X) is revealed.",
+      "B forwards the inner packet onward toward X.",
+      "X receives the packet (having come from the workplace network)."];
+    function go(i){mover.style.transform="translate("+pos[i][0]+"px,"+pos[i][1]+"px)";
+      const wrapped=i>=1&&i<=3;outer.setAttribute("opacity",wrapped?1:0);ot.setAttribute("opacity",wrapped?1:0);
+      hl(server,i===3||i===4);}
+    return{n:6,caps:caps,go:go};
+  });
+
+  /* =========================================================
+     11 · Token ring
+  ========================================================= */
+  section("token","11 · Token Ring","A token circulates; only the holder may transmit. Order is fixed (e.g. by MAC address).",
+  function(svg){
+    const n=[[150,90,"S0"],[500,90,"S1"],[500,265,"S2"],[150,265,"S3"]];
+    const nodes=n.map(p=>box(svg,p[0]-32,p[1]-24,64,48,p[2]));
+    ln(svg,182,90,468,90);ln(svg,500,114,500,241);ln(svg,468,265,182,265);ln(svg,150,241,150,114);
+    const mover=X("g",{class:"mover"},svg);X("circle",{cx:0,cy:0,r:12,class:"badge"},mover);const ml=X("text",{x:0,y:1,class:"pktlbl",style:"fill:#2a9d8f"},mover);ml.textContent="T";
+    const seq=[[150,90],[325,90],[500,90],[500,177],[500,265],[325,265],[150,265],[150,177],[150,90]];
+    const caps=["An idle token circulates the ring.",
+      "Token reaches S1.",
+      "S1 has data for S3, so it grabs the token and (conceptually) flips it to 'busy'.",
+      "S1 sends its frame around the ring toward S3.",
+      "The frame passes S2.",
+      "S3 receives the frame (copies it and marks it received).",
+      "The frame continues back to S1.",
+      "S1 sees its frame returned and releases a fresh free token.",
+      "The token resumes circulating."];
+    function go(i){const p=seq[i];mover.style.transform="translate("+p[0]+"px,"+p[1]+"px)";
+      nodes.forEach((nd,k)=>hl(nd,i>=2&&i<=7&&k===1));hl(nodes[2],i>=5&&i<=6);}
+    return{n:8,caps:caps,go:go};
+  });
+
+  /* =========================================================
+     12 · Virtual circuits
+  ========================================================= */
+  section("vc","12 · Virtual circuits (VCI rewrite)","A connection is set up first; each switch maps ⟨VCI_in, port_in⟩ → ⟨VCI_out, port_out⟩ and rewrites the VCI.",
+  function(svg){
+    const a=box(svg,20,150,60,50,"A","host");
+    const s1=box(svg,150,150,64,50,"S1"),s2=box(svg,300,150,64,50,"S2"),s4=box(svg,450,150,64,50,"S4");
+    const d=box(svg,600,150,50,50,"D","host");
+    const l1=ln(svg,80,175,150,175),l2=ln(svg,214,175,300,175),l3=ln(svg,364,175,450,175),l4=ln(svg,514,175,600,175);
+    const v1=txt(svg,115,165,"1","small"),v2=txt(svg,257,165,"?","small"),v3=txt(svg,407,165,"?","small"),v4=txt(svg,557,165,"?","small");
+    const mover=X("g",{class:"mover"},svg);X("circle",{cx:0,cy:0,r:16,class:"dot"},mover);const ml=X("text",{x:0,y:1,class:"pktlbl"},mover);ml.textContent="1";
+    const pos=[[50,175],[182,175],[332,175],[482,175],[625,175]];
+    const info=X("text",{x:330,y:300,class:"mono small"},svg);
+    const caps=["Connection A→D is set up. A puts VCI 1 on the first link.",
+      "S1: ⟨VCI 1, from A⟩ → ⟨VCI 2, to S2⟩.",
+      "S2: ⟨VCI 2, from S1⟩ → ⟨VCI 3, to S4⟩.",
+      "S4: ⟨VCI 3, from S2⟩ → ⟨VCI 4, to D⟩.",
+      "D receives the packet carrying VCI 4. Each hop used a different VCI — unique only per link."];
+    function go(i){mover.style.transform="translate("+pos[i][0]+"px,"+pos[i][1]+"px)";
+      const v=[1,1,2,3,4][i];ml.textContent=v;
+      v2.textContent=i>=1?"2":"?";v3.textContent=i>=2?"3":"?";v4.textContent=i>=3?"4":"?";
+      hl(s1,i===1);hl(s2,i===2);hl(s4,i===3);
+      const rows=["","S1: ⟨1,A⟩ → ⟨2,S2⟩","S2: ⟨2,S1⟩ → ⟨3,S4⟩","S4: ⟨3,S2⟩ → ⟨4,D⟩","delivered with VCI 4"];
+      info.textContent=rows[i];}
+    return{n:4,caps:caps,go:go};
+  });
+
+})();
+</script>
+</body>
+</html>
